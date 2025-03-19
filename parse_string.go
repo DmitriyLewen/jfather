@@ -1,21 +1,11 @@
 package jfather
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"unicode/utf16"
 )
-
-var escapes = map[rune]string{
-	'\\': "\\",
-	'/':  "/",
-	'"':  "\"",
-	'n':  "\n",
-	'r':  "\r",
-	'b':  "\b",
-	'f':  "\f",
-	't':  "\t",
-}
 
 func (p *parser) parseString() (Node, error) {
 
@@ -30,75 +20,25 @@ func (p *parser) parseString() (Node, error) {
 		return nil, p.makeError("expecting string delimiter")
 	}
 
-	var str string
-
-	var inEscape bool
-	var inHex bool
-	var hex []rune
-
+	// Start with opening quote
+	buffer := []byte{'"'}
 	for {
 		c, err := p.next()
 		if err != nil {
 			return nil, err
 		}
-		if inHex {
-			switch {
-			case c >= 'a' && c <= 'f', c >= 'A' && c <= 'F', c >= '0' && c <= '9':
-				hex = append(hex, c)
-				switch len(hex) {
-				case 4:
-					inHex = false
-					// If we can't convert hex with 4 characters - we expect it to be a surrogate character
-					// If not - we'll return an error later
-					if char, ok := p.tryUnicode(hex); ok {
-						str += char
-						hex = nil
-					}
-				case 8: // surrogate
-					char, err := p.trySurrogate(hex)
-					if err != nil {
-						return nil, p.makeError("invalid unicode character '%s'", err)
-					}
-					str += char
-					inHex = false
-					hex = nil
-				}
-			default:
-				return nil, p.makeError("invalid hexedecimal escape sequence '\\%s%c'", string(hex), c)
+		if c == '"' {
+			buffer = append(buffer, '"')
+			var result string
+			if err := json.Unmarshal(buffer, &result); err != nil {
+				return nil, p.makeError("invalid JSON string: %v", err)
 			}
-		} else if inEscape {
-			inEscape = false
-			if c == 'u' {
-				inHex = true
-				continue
-			}
-			seq, ok := escapes[c]
-			if !ok {
-				return nil, p.makeError("invalid escape sequence '\\%c'", c)
-			}
-			str += seq
-		} else {
-			switch c {
-			case '\\':
-				inEscape = true
-			case '"':
-				if err := p.hexFinished(hex); err != nil {
-					return nil, err
-				}
-				n.raw = str
-				n.end = p.position
-				return n, nil
-			default:
-				if err := p.hexFinished(hex); err != nil {
-					return nil, err
-				}
-				if c < 0x20 || c > 0x10FFFF {
-					return nil, p.makeError("invalid unescaped character '0x%X'", c)
-				}
-				str += string(c)
-			}
+			n.raw = result
+			n.end = p.position
+			return n, nil
 		}
 
+		buffer = append(buffer, byte(c))
 	}
 }
 

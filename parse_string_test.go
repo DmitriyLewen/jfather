@@ -35,14 +35,16 @@ func Test_StringWithOnlyInvalidUnicode(t *testing.T) {
 	example := []byte(`"\ud83d"`)
 	var output string
 	err := Unmarshal(example, &output)
-	require.ErrorContains(t, err, "invalid hex character: \\ud83d")
+	require.NoError(t, err)
+	assert.Equal(t, "�", output)
 }
 
 func Test_StringWithInvalidUnicode(t *testing.T) {
 	example := []byte(`"\ud83d something"`)
 	var output string
 	err := Unmarshal(example, &output)
-	require.ErrorContains(t, err, "invalid hex character: \\ud83d")
+	require.NoError(t, err)
+	assert.Equal(t, "� something", output)
 }
 
 func Test_StringToUninitialisedPointer(t *testing.T) {
